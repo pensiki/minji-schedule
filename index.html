@@ -401,7 +401,7 @@ header h1{
       <button class="view-btn active" id="viewList" onclick="setView('list')" title="列表">☰</button>
       <button class="view-btn" id="viewCal" onclick="setView('calendar')" title="日历">📅</button>
       <button class="toggle-btn" id="toggleStats" onclick="toggleSection('stats')">统计</button>
-      <button class="toggle-btn" id="toggleData" onclick="toggleSection('data')">导入数据</button>
+      <button class="toggle-btn" id="toggleData" onclick="toggleSection('data')">数据同步</button>
     </div>
   </div>
 
@@ -451,12 +451,11 @@ header h1{
 
   <!-- DATA PANEL -->
   <div class="data-panel hidden" id="dataPanel">
-    <h3>导入行程数据</h3>
+    <h3>数据同步</h3>
     <div class="data-btns">
-      <button class="btn-secondary" onclick="document.getElementById('importFile').click()">⬆ 导入 JSON</button>
+      <button class="btn-secondary" onclick="fetchData()">🔄 立即刷新数据</button>
     </div>
-    <div style="margin-top:10px;font-size:11px;color:var(--tl);">导入后将覆盖当前显示的行程数据</div>
-    <input type="file" id="importFile" accept=".json" class="hidden" onchange="importJSON(event)">
+    <div style="margin-top:10px;font-size:11px;color:var(--tl);" id="fetchStatus">数据自动从 GitHub 加载</div>
   </div>
 
   <!-- LIST VIEW -->
@@ -496,7 +495,7 @@ header h1{
 // ════════════════════════════════════════
 //  DATA
 // ════════════════════════════════════════
-let items = JSON.parse(localStorage.getItem('minji_schedule_ro') || '[]');
+let items = [];
 let currentFilter     = 'all';
 let currentStatFilter = 'upcoming'; // default: show upcoming
 let currentView       = 'list';
@@ -532,7 +531,7 @@ function bumpCat(cat){
   catOrder.unshift(cat);
   saveCatOrder();
 }
-function persist(){ localStorage.setItem('minji_schedule_ro', JSON.stringify(items)); }
+function persist(){ /* 只读版不写本地存储 */ }
 
 // ════════════════════════════════════════
 //  STATUS
@@ -1244,28 +1243,37 @@ function exportJSON(){
   showToast('数据已导出 ✦');
 }
 
-function importJSON(e){
-  const file=e.target.files[0]; if(!file) return;
-  const reader=new FileReader();
-  reader.onload=ev=>{
-    try{
-      const data=JSON.parse(ev.target.result);
+// ════════════════════════════════════════
+//  FETCH DATA FROM GITHUB
+// ════════════════════════════════════════
+const DATA_URL = 'https://raw.githubusercontent.com/pensiki/minji-schedule/main/minji-schedule.json';
+
+function fetchData(){
+  const statusEl = document.getElementById('fetchStatus');
+  if(statusEl) statusEl.textContent = '正在加载…';
+  showToast('正在同步数据…');
+  fetch(DATA_URL + '?t=' + Date.now())
+    .then(r => {
+      if(!r.ok) throw new Error('网络错误 ' + r.status);
+      return r.json();
+    })
+    .then(data => {
       if(!Array.isArray(data)) throw new Error('格式错误');
-      items=data.map(it=>({
+      items = data.map(it=>({
         ...it,
         timeStart: it.timeStart||it.time||'',
         timeEnd:   it.timeEnd||'',
       }));
-      persist();
       renderFilterTabs(); renderList(); updateStats(); updateStatsPanel();
       if(currentView==='calendar') renderCalendar();
-      showToast(`已导入 ${items.length} 条行程 ✦`);
-    } catch(err){
-      showToast('导入失败：文件格式不正确');
-    }
-  };
-  reader.readAsText(file);
-  e.target.value='';
+      const now = new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
+      if(statusEl) statusEl.textContent = `上次同步：${now}　共 ${items.length} 条行程`;
+      showToast(`数据已更新，共 ${items.length} 条行程 ✦`);
+    })
+    .catch(err => {
+      if(statusEl) statusEl.textContent = '加载失败，请检查网络或稍后重试';
+      showToast('数据加载失败：' + err.message);
+    });
 }
 
 // ════════════════════════════════════════
@@ -1300,6 +1308,9 @@ renderFilterTabs();
 renderList();
 updateStats();
 document.getElementById('sc-upcoming').classList.add('active-stat');
+
+// 页面加载时自动从 GitHub 拉取最新数据
+fetchData();
 </script>
 </body>
 </html>
