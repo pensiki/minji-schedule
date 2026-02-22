@@ -1257,13 +1257,19 @@ function fetchData(){
       if(!r.ok) throw new Error('网络错误 ' + r.status);
       return r.json();
     })
-    .then(data => {
+    .then(raw => {
+      // 兼容旧格式（纯数组）和新格式（{items, notice}）
+      const data = Array.isArray(raw) ? raw : raw.items;
       if(!Array.isArray(data)) throw new Error('格式错误');
       items = data.map(it=>({
         ...it,
         timeStart: it.timeStart||it.time||'',
         timeEnd:   it.timeEnd||'',
       }));
+      // 渲染公告
+      if(!Array.isArray(raw) && raw.notice !== undefined){
+        document.getElementById('noticeContent').innerHTML = raw.notice;
+      }
       renderFilterTabs(); renderList(); updateStats(); updateStatsPanel();
       if(currentView==='calendar') renderCalendar();
       const now = new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
